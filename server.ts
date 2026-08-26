@@ -363,12 +363,12 @@ ${text}`;
             const parsed = JSON.parse(resText);
             return {
               translated: parsed.translated || text,
-              detectedLang: parsed.detected_lang || "en",
+              detectedLang: parsed.detected_lang || targetLang,
               engine: "gemini",
             };
           } catch {
             // fallback if not valid JSON
-            return { translated: resText.replace(/^["']|["']$/g, ""), detectedLang: "en", engine: "gemini" };
+            return { translated: resText.replace(/^["']|["']$/g, ""), detectedLang: targetLang, engine: "gemini" };
           }
         }
         return {
@@ -386,7 +386,7 @@ ${text}`;
   }
 
   // Fallback if no Gemini key or offline
-  return { translated: text, detectedLang: srcLang || "en", engine: "none" };
+  return { translated: text, detectedLang: srcLang || targetLang, engine: "none" };
 }
 
 async function transcribeAndTranslateAudio(
@@ -507,11 +507,15 @@ app.post("/warm", (req, res) => {
 
 app.post("/api/translate", async (req, res) => {
   try {
-    const { text, sourceLang = "en", targetLang = "en" } = req.body || {};
+    const { text, sourceLang, targetLang } = req.body || {};
     if (!text) {
       return res.status(400).json({ error: "Text is required" });
     }
-    const result = await translateText(text, sourceLang, targetLang);
+    // If targetLang is not provided, we cannot translate - return error
+    if (!targetLang) {
+      return res.status(400).json({ error: "Target language is required" });
+    }
+    const result = await translateText(text, sourceLang || "auto", targetLang);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Translation error" });
@@ -552,6 +556,8 @@ async function startServer(): Promise<void> {
     let lastProcessedTime = Date.now();
     let recentTranscripts: { text: string; time: number }[] = [];
 
+    console.log(`[WS] New connection established, default targetLang: ${targetLang}`);
+
     // Send ready event
     ws.send(JSON.stringify({ type: "ready", sample_rate: 16000 }));
 
@@ -570,6 +576,7 @@ async function startServer(): Promise<void> {
 
       isProcessingAudio = true;
       try {
+        console.log(`[WS] Processing audio with targetLang: ${targetLang}`);
         const wav = createWavBuffer(mergedPcm, 16000, 1, 16);
         const result = await transcribeAndTranslateAudio(wav, targetLang);
 
@@ -636,8 +643,10 @@ async function startServer(): Promise<void> {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === "config") {
-          if (msg.target_lang && msg.target_lang !== targetLang) {
+          console.log(`[WS] Config received: target_lang=${msg.target_lang}, current targetLang=${targetLang}`);
+          if (msg.target_lang) {
             targetLang = msg.target_lang;
+            console.log(`[WS] Updated targetLang to: ${targetLang}`);
           }
           if (msg.hf_token !== undefined) hfToken = msg.hf_token;
         } else if (msg.type === "stop") {
@@ -647,6 +656,7 @@ async function startServer(): Promise<void> {
           audioBufferList = [];
           accumulatedBytes = 0;
         } else if (msg.type === "text_segment") {
+          console.log(`[WS] Text segment received with target_lang=${msg.target_lang}`);
           // Direct speech recognition from client
           const text = (msg.text || "").trim();
           if (!text || isHallucinationOrSample(text)) return;
@@ -656,11 +666,13 @@ async function startServer(): Promise<void> {
           if (recentTranscripts.length > 250) recentTranscripts.shift();
 
           const srcLang = msg.lang || "auto";
-          const tgtLang = msg.target_lang || targetLang || "en";
+          // Use target_lang from message if provided, otherwise fall back to the connection's targetLang
+          const tgtLang = msg.target_lang || targetLang;
+          console.log(`[WS] Translating text with srcLang=${srcLang}, tgtLang=${tgtLang}`);
           const speaker = msg.speaker || "Speaker 1 (You)";
           const curTime = (Date.now() - startTime) / 1000;
           const trans = await translateText(text, srcLang, tgtLang);
-          const detected = trans.detectedLang || (srcLang === "auto" ? "en" : srcLang);
+          const detected = trans.detectedLang || (srcLang === "auto" ? tgtLang : srcLang);
 
           ws.send(JSON.stringify({ type: "language", language: detected }));
           ws.send(
@@ -686,6 +698,7 @@ async function startServer(): Promise<void> {
     });
 
     ws.on("close", () => {
+      console.log(`[WS] Connection closed, targetLang was: ${targetLang}`);
       audioBufferList = [];
       accumulatedBytes = 0;
     });
