@@ -1,0 +1,6 @@
+{
+  "name": "Meeting Translator",
+  "description": "Real-time multilingual meeting transcription and translation powered by Gemini 3.5 Live Translate API.",
+  "requestFramePermissions": ["microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

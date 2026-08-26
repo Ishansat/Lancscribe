@@ -1,0 +1,60 @@
+{
+  "name": "meeting-translator",
+  "version": "1.0.0",
+  "description": "Real-time multilingual meeting transcription and translation powered by Gemini 3.5 Live Translate API.",
+  "main": "electron/main.js",
+  "author": "you",
+  "license": "MIT",
+  "build": {
+    "appId": "com.meetingtranslator.app",
+    "productName": "Meeting Translator",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Meeting Translator uses this to detect when you join a Zoom, Microsoft Teams, or Google Meet call so it can offer to start transcribing."
+      }
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ]
+  },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --external:vite --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@google/genai": "^2.18.0",
+    "express": "^5.2.1",
+    "lucide-react": "^1.33.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^7.0.3",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "vite": "^5.4.8",
+    "wait-on": "^9.1.0"
+  }
+}
